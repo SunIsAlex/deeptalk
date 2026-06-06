@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#1a73e8">
+<title>AI 口语陪练</title>
+<style>
+  :root {
+    --blue: #1a73e8;
+    --blue-hover: #1765cc;
+    --text: #202124;
+    --text-secondary: #5f6368;
+    --border: #dadce0;
+    --bg: #fff;
+    --bg-soft: #f8f9fa;
+    --green: #1e8e3e;
+    --red: #d93025;
+    --me: #e8f0fe;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; line-height: 1.5;
+    height: 100dvh; display: flex; flex-direction: column;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex: none;
+  }
+  header h1 { margin: 0; font-size: 18px; font-weight: 400; color: var(--text-secondary); }
+  header h1 b { color: var(--text); font-weight: 500; }
+  .back-btn {
+    background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 4px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  .back-btn:hover { background: var(--bg-soft); }
+  .back-btn[hidden] { display: none; }
+
+  main { flex: 1; min-height: 0; display: flex; }
+  .wrap { max-width: 880px; width: 100%; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; min-height: 0; }
+
+  /* ---------- 角色选择 ---------- */
+  #picker { display: flex; flex-direction: column; }
+  #picker .lead { font-size: 22px; font-weight: 400; color: var(--text); margin: 4px 0 4px; }
+  #picker .sub { color: var(--text-secondary); margin: 0 0 24px; max-width: 52ch; }
+  .cards {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1px; background: var(--border); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden;
+  }
+  .card {
+    background: var(--bg); border: none; text-align: left; cursor: pointer;
+    padding: 20px; transition: background 0.12s; font-family: inherit;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .card:hover { background: var(--bg-soft); }
+  .card .emoji { font-size: 26px; }
+  .card .lvl {
+    font-size: 11px; color: var(--blue); text-transform: uppercase; letter-spacing: 0.8px;
+  }
+  .card h3 { margin: 0; font-size: 16px; font-weight: 500; }
+  .card .desc { color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+
+  /* ---------- 对话 ---------- */
+  #chat { display: none; flex-direction: column; flex: 1; min-height: 0; }
+  .convo-head {
+    display: flex; align-items: center; gap: 10px; padding-bottom: 12px;
+    border-bottom: 1px solid var(--border); margin-bottom: 4px;
+  }
+  .convo-head .av { width: 30px; height: 30px; border-radius: 50%; background: var(--bg-soft); display: grid; place-items: center; font-size: 16px; }
+  .convo-head .name { font-weight: 500; font-size: 15px; }
+  .convo-head .name span { color: var(--text-secondary); font-weight: 400; font-size: 13px; margin-left: 6px; }
+
+  #stream { flex: 1; overflow-y: auto; padding: 18px 2px; display: flex; flex-direction: column; gap: 14px; }
+
+  .row { display: flex; gap: 10px; max-width: 86%; }
+  .row.me { align-self: flex-end; flex-direction: row-reverse; }
+  .av-s { width: 30px; height: 30px; flex: none; border-radius: 50%; display: grid; place-items: center; font-size: 15px; background: var(--bg-soft); }
+  .bubble {
+    background: var(--bg-soft); border: 1px solid var(--border);
+    border-radius: 12px; border-top-left-radius: 3px;
+    padding: 10px 14px; font-size: 15px; line-height: 1.55; position: relative;
+  }
+  .me .bubble { background: var(--me); border-color: #d2e3fc; border-top-left-radius: 12px; border-top-right-radius: 3px; }
+  .bubble .speak {
+    position: absolute; bottom: 4px; right: 6px; background: transparent; border: none;
+    color: var(--text-secondary); cursor: pointer; font-size: 12px; opacity: 0; transition: opacity 0.12s; padding: 2px;
+  }
+  .row:hover .bubble .speak { opacity: 0.7; }
+  .bubble .speak:hover { opacity: 1; }
+
+  .correction {
+    display: block; margin-bottom: 8px; padding: 7px 10px; border-radius: 8px;
+    background: #fce8e6; border: 1px solid #f5c6c2; font-size: 13px; line-height: 1.45;
+  }
+  .correction .lab { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--red); display: block; margin-bottom: 2px; }
+  .correction s { color: var(--red); }
+  .correction strong { color: var(--green); font-weight: 600; }
+
+  .typing { display: inline-block; width: 7px; height: 15px; background: var(--blue); vertical-align: -2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 0%,50%{opacity:1} 50.01%,100%{opacity:0} }
+
+  /* ---------- 输入区 ---------- */
+  .composer { display: flex; gap: 8px; align-items: flex-end; padding-top: 14px; border-top: 1px solid var(--border); }
+  .composer textarea {
+    flex: 1; resize: none; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 14px; font-family: inherit; font-size: 15px; line-height: 1.4; color: var(--text);
+    outline: none; max-height: 110px;
+  }
+  .composer textarea:focus { border-color: var(--blue); }
+  .mic-btn {
+    width: 42px; height: 42px; flex: none; border: 1px solid var(--border); background: var(--bg);
+    border-radius: 8px; cursor: pointer; font-size: 16px;
+  }
+  .mic-btn:hover { background: var(--bg-soft); }
+  .mic-btn.rec { background: var(--red); border-color: var(--red); color: #fff; }
+  .send-btn {
+    background: var(--blue); color: #fff; border: none; border-radius: 8px;
+    padding: 0 22px; height: 42px; font-size: 14px; font-weight: 500; cursor: pointer; letter-spacing: 0.5px;
+  }
+  .send-btn:hover { background: var(--blue-hover); }
+  .send-btn:disabled { background: #c4c7c5; cursor: default; }
+  .err { color: var(--red); font-size: 13px; padding: 6px 0 0; min-height: 20px; }
+
+  @media (max-width: 720px) {
+    .wrap { padding: 12px; }
+    header { padding: 10px 14px; }
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1><b>AI 口语陪练</b> 听说练习</h1>
+    <button class="back-btn" id="backBtn" hidden>↩ 换角色</button>
+  </header>
+
+  <main>
+    <div class="wrap">
+      <!-- 角色选择 -->
+      <div id="picker">
+        <p class="lead">挑一个角色，开口聊。</p>
+        <p class="sub">对方会用英文回应、念出声音，并在你说错时轻轻纠正。重点是开口，不是背单词。</p>
+        <div class="cards" id="cards"></div>
+      </div>
+
+      <!-- 对话 -->
+      <div id="chat">
+        <div class="convo-head">
+          <div class="av" id="headAv"></div>
+          <div class="name" id="headName"></div>
+        </div>
+        <div id="stream"></div>
+        <div class="err" id="err"></div>
+        <div class="composer">
+          <button class="mic-btn" id="micBtn" title="语音输入">🎙️</button>
+          <textarea id="input" rows="1" placeholder="打字，或点麦克风开口说…"></textarea>
+          <button class="send-btn" id="sendBtn">发送</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+const ENDPOINT = "/chat"; // EdgeOne Cloud Function: node-functions/chat.js
+
+const SCENARIOS = {
+  barista:    {emoji:"☕", role:"Mia",      title:"咖啡师",   level:"Beginner",     desc:"点杯咖啡、聊聊今天。语速慢、用词简单。"},
+  interviewer:{emoji:"💼", role:"Mr. Chen", title:"面试官",   level:"Intermediate", desc:"模拟求职面试，练习专业、有条理的回答。"},
+  traveler:   {emoji:"🌍", role:"Lucas",    title:"旅途偶遇", level:"Intermediate", desc:"在里斯本遇到的健谈当地人，口语化、地道。"},
+  debate:     {emoji:"⚖️", role:"Aria",     title:"辩论搭子", level:"Advanced",     desc:"她永远站你的对立面，逼你为观点辩护。"},
+};
+
+let scenario=null, history=[], streaming=false;
+const $=id=>document.getElementById(id);
+const cardsEl=$('cards'), pickerEl=$('picker'), chatEl=$('chat'),
+      streamEl=$('stream'), inputEl=$('input'), sendBtn=$('sendBtn'),
+      micBtn=$('micBtn'), errEl=$('err'), backBtn=$('backBtn');
+
+/* 角色卡片 */
+Object.entries(SCENARIOS).forEach(([key,s])=>{
+  const c=document.createElement('button');
+  c.className='card';
+  c.innerHTML=`<span class="emoji">${s.emoji}</span>
+    <span class="lvl">${s.level}</span>
+    <h3>${s.role} · ${s.title}</h3>
+    <span class="desc">${s.desc}</span>`;
+  c.onclick=()=>startScenario(key);
+  cardsEl.appendChild(c);
+});
+
+function startScenario(key){
+  scenario=key; history=[];
+  const s=SCENARIOS[key];
+  $('headAv').textContent=s.emoji;
+  $('headName').innerHTML=`${s.role} <span>· ${s.title} · ${s.level}</span>`;
+  pickerEl.style.display='none';
+  chatEl.style.display='flex';
+  backBtn.hidden=false;
+  streamEl.innerHTML=''; errEl.textContent='';
+  send("(The user just arrived. Greet them and start the conversation.)", true);
+}
+backBtn.onclick=()=>{
+  if(streaming) return;
+  if('speechSynthesis' in window) speechSynthesis.cancel();
+  chatEl.style.display='none'; pickerEl.style.display='flex'; backBtn.hidden=true;
+};
+
+/* 气泡渲染 */
+function addBubble(role, text=""){
+  const row=document.createElement('div');
+  row.className='row '+(role==='user'?'me':'ai');
+  const av=document.createElement('div'); av.className='av-s';
+  av.textContent = role==='user' ? '🙂' : SCENARIOS[scenario].emoji;
+  const b=document.createElement('div'); b.className='bubble';
+  const span=document.createElement('span'); span.className='txt'; span.textContent=text;
+  b.appendChild(span);
+  if(role!=='user'){
+    const sp=document.createElement('button'); sp.className='speak'; sp.textContent='🔊';
+    sp.onclick=()=>speak(span.textContent); b.appendChild(sp);
+  }
+  row.appendChild(av); row.appendChild(b);
+  streamEl.appendChild(row);
+  streamEl.scrollTop=streamEl.scrollHeight;
+  return {bubble:b,span};
+}
+function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function renderAi(bubble, span, raw){
+  const m=raw.match(/\[\[correction\]\]([\s\S]*?)\[\[\/correction\]\]/);
+  let body=raw, corrEl=bubble.querySelector('.correction');
+  if(m){
+    body=raw.replace(m[0],'').trim();
+    const parts=m[1].split('|');
+    const fix=(parts[0]||'').split('->');
+    const wrong=(fix[0]||'').trim(), right=(fix[1]||'').trim(), reason=(parts[1]||'').trim();
+    if(!corrEl){ corrEl=document.createElement('div'); corrEl.className='correction'; bubble.insertBefore(corrEl, span); }
+    corrEl.innerHTML=`<span class="lab">提示</span><s>${esc(wrong)}</s> → <strong>${esc(right)}</strong>${reason?` · ${esc(reason)}`:''}`;
+  }
+  span.textContent=body;
+}
+
+/* 朗读 */
+let voice=null;
+function pickVoice(){
+  const vs=speechSynthesis.getVoices();
+  voice=vs.find(v=>/en-US/i.test(v.lang)&&/female|samantha|zira|aria/i.test(v.name))
+    || vs.find(v=>/en-US/i.test(v.lang)) || vs.find(v=>/^en/i.test(v.lang)) || null;
+}
+if('speechSynthesis' in window){ pickVoice(); speechSynthesis.onvoiceschanged=pickVoice; }
+function speak(text){
+  if(!('speechSynthesis' in window)||!text) return;
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(text);
+  if(voice) u.voice=voice;
+  u.rate=scenario==='barista'?0.92:1.0;
+  speechSynthesis.speak(u);
+}
+
+/* 语音输入 */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let recog=null, recording=false;
+if(SR){
+  recog=new SR(); recog.lang='en-US'; recog.interimResults=true; recog.continuous=false;
+  let base='';
+  recog.onstart=()=>{recording=true; micBtn.classList.add('rec'); base=inputEl.value?inputEl.value+' ':'';};
+  recog.onresult=e=>{ let t=''; for(let i=e.resultIndex;i<e.results.length;i++) t+=e.results[i][0].transcript; inputEl.value=base+t; autosize(); };
+  recog.onend=()=>{recording=false; micBtn.classList.remove('rec');};
+  recog.onerror=()=>{recording=false; micBtn.classList.remove('rec');};
+}else{ micBtn.style.display='none'; }
+micBtn.onclick=()=>{ if(!recog) return; recording?recog.stop():recog.start(); };
+
+/* 发送 + SSE 流式 */
+async function send(userText, isOpener=false){
+  if(streaming) return;
+  errEl.textContent='';
+  if(!isOpener){ if(!userText.trim()) return; addBubble('user', userText); }
+  history.push({role:'user', content:userText});
+
+  streaming=true; sendBtn.disabled=true;
+  const {bubble,span}=addBubble('ai','');
+  const cursor=document.createElement('span'); cursor.className='typing'; bubble.appendChild(cursor);
+
+  let raw='';
+  try{
+    const res=await fetch(ENDPOINT,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({scenario, messages:history})
+    });
+    if(!res.ok||!res.body) throw new Error('服务异常 '+res.status);
+    const reader=res.body.getReader(), dec=new TextDecoder();
+    let buf='';
+    while(true){
+      const {value,done}=await reader.read();
+      if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      let idx;
+      while((idx=buf.indexOf('\n\n'))>=0){
+        const frame=buf.slice(0,idx); buf=buf.slice(idx+2);
+        const ev=/event:\s*(.*)/.exec(frame)?.[1]?.trim();
+        const dataLine=/data:\s*([\s\S]*)/.exec(frame)?.[1];
+        if(!dataLine) continue;
+        let p; try{p=JSON.parse(dataLine);}catch{continue;}
+        if(ev==='token'){ raw+=p.text; renderAi(bubble, span, raw); streamEl.scrollTop=streamEl.scrollHeight; }
+        else if(ev==='error'){ throw new Error(p.message||'流式错误'); }
+      }
+    }
+  }catch(e){ errEl.textContent='⚠ '+e.message; }
+  finally{ cursor.remove(); streaming=false; sendBtn.disabled=false; }
+
+  const clean=raw.replace(/\[\[correction\]\][\s\S]*?\[\[\/correction\]\]/,'').trim();
+  if(clean){ history.push({role:'assistant', content:clean}); speak(clean); }
+  inputEl.focus();
+}
+
+/* 输入框 */
+function autosize(){ inputEl.style.height='auto'; inputEl.style.height=Math.min(inputEl.scrollHeight,110)+'px'; }
+inputEl.addEventListener('input', autosize);
+inputEl.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); fire(); } });
+sendBtn.onclick=fire;
+function fire(){
+  if(recording&&recog) recog.stop();
+  const t=inputEl.value; if(!t.trim()) return;
+  inputEl.value=''; autosize(); send(t);
+}
+</script>
+</body>
+</html>
+
