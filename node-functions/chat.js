@@ -75,7 +75,7 @@ export async function onRequest(context) {
         temperature: 0.8,
         max_tokens: 1024,
         messages: chatMessages,
-	extra_body: {"thinking": {"type": "disabled"}}
+	thinking: {type: "disabled"}
       });
 
       for await (const chunk of completion) {
