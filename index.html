@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#1a73e8">
 <title>AI 口语陪练</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@18.0.5/lib/marked.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.4/dist/purify.min.js"></script>
 <style>
   :root {
     --blue: #1a73e8;
@@ -44,7 +46,7 @@
   main { flex: 1; min-height: 0; display: flex; }
   .wrap { max-width: 880px; width: 100%; margin: 0 auto; padding: 24px; display: flex; flex-direction: column; min-height: 0; }
 
-  /* ---------- 角色选择 ---------- */
+  /* 角色选择 */
   #picker { display: flex; flex-direction: column; }
   #picker .lead { font-size: 22px; font-weight: 400; color: var(--text); margin: 4px 0 4px; }
   #picker .sub { color: var(--text-secondary); margin: 0 0 24px; max-width: 52ch; }
@@ -60,13 +62,11 @@
   }
   .card:hover { background: var(--bg-soft); }
   .card .emoji { font-size: 26px; }
-  .card .lvl {
-    font-size: 11px; color: var(--blue); text-transform: uppercase; letter-spacing: 0.8px;
-  }
+  .card .lvl { font-size: 11px; color: var(--blue); text-transform: uppercase; letter-spacing: 0.8px; }
   .card h3 { margin: 0; font-size: 16px; font-weight: 500; }
   .card .desc { color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
 
-  /* ---------- 对话 ---------- */
+  /* 对话 */
   #chat { display: none; flex-direction: column; flex: 1; min-height: 0; }
   .convo-head {
     display: flex; align-items: center; gap: 10px; padding-bottom: 12px;
@@ -87,6 +87,19 @@
     padding: 10px 14px; font-size: 15px; line-height: 1.55; position: relative;
   }
   .me .bubble { background: var(--me); border-color: #d2e3fc; border-top-left-radius: 12px; border-top-right-radius: 3px; }
+  /* 气泡内 markdown 元素 */
+  .bubble .txt > :first-child { margin-top: 0; }
+  .bubble .txt > :last-child { margin-bottom: 0; }
+  .bubble .txt p { margin: 0 0 8px; }
+  .bubble .txt strong { font-weight: 600; }
+  .bubble .txt em { font-style: italic; }
+  .bubble .txt ul, .bubble .txt ol { margin: 6px 0; padding-left: 20px; }
+  .bubble .txt li { margin: 2px 0; }
+  .bubble .txt code { background: rgba(0,0,0,0.05); padding: 1px 5px; border-radius: 4px; font-size: 13px; font-family: "SF Mono", Menlo, Consolas, monospace; }
+  .bubble .txt pre { background: rgba(0,0,0,0.05); padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; }
+  .bubble .txt pre code { background: none; padding: 0; }
+  .bubble .txt a { color: var(--blue); }
+  .bubble .txt blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--border); color: var(--text-secondary); }
   .bubble .speak {
     position: absolute; bottom: 4px; right: 6px; background: transparent; border: none;
     color: var(--text-secondary); cursor: pointer; font-size: 12px; opacity: 0; transition: opacity 0.12s; padding: 2px;
@@ -105,7 +118,7 @@
   .typing { display: inline-block; width: 7px; height: 15px; background: var(--blue); vertical-align: -2px; animation: blink 1s steps(2) infinite; }
   @keyframes blink { 0%,50%{opacity:1} 50.01%,100%{opacity:0} }
 
-  /* ---------- 输入区 ---------- */
+  /* 输入区 */
   .composer { display: flex; gap: 8px; align-items: flex-end; padding-top: 14px; border-top: 1px solid var(--border); }
   .composer textarea {
     flex: 1; resize: none; border: 1px solid var(--border); border-radius: 8px;
@@ -136,19 +149,20 @@
 <body>
   <header>
     <h1><b>AI 口语陪练</b> 听说练习</h1>
-    <button class="back-btn" id="backBtn" hidden>↩ 换角色</button>
+    <div style="display:flex; gap:8px;">
+      <button class="back-btn" id="resetBtn" hidden>🗑 清空对话</button>
+      <button class="back-btn" id="backBtn" hidden>↩ 换角色</button>
+    </div>
   </header>
 
   <main>
     <div class="wrap">
-      <!-- 角色选择 -->
       <div id="picker">
         <p class="lead">挑一个角色，开口聊。</p>
         <p class="sub">对方会用英文回应、念出声音，并在你说错时轻轻纠正。重点是开口，不是背单词。</p>
         <div class="cards" id="cards"></div>
       </div>
 
-      <!-- 对话 -->
       <div id="chat">
         <div class="convo-head">
           <div class="av" id="headAv"></div>
@@ -166,84 +180,174 @@
   </main>
 
 <script>
-const ENDPOINT = "/chat"; // EdgeOne Cloud Function: node-functions/chat.js
+const ENDPOINT = "/chat";
 
 const SCENARIOS = {
-  barista:    {emoji:"☕", role:"Mia",      title:"咖啡师",   level:"Beginner",     desc:"点杯咖啡、聊聊今天。语速慢、用词简单。"},
-  interviewer:{emoji:"💼", role:"Mr. Chen", title:"面试官",   level:"Intermediate", desc:"模拟求职面试，练习专业、有条理的回答。"},
-  traveler:   {emoji:"🌍", role:"Lucas",    title:"旅途偶遇", level:"Intermediate", desc:"在里斯本遇到的健谈当地人，口语化、地道。"},
-  debate:     {emoji:"⚖️", role:"Aria",     title:"辩论搭子", level:"Advanced",     desc:"她永远站你的对立面，逼你为观点辩护。"},
+  barista:    {emoji:"\u2615", role:"Mia",      title:"\u5496\u5561\u5e08",   level:"Beginner",     desc:"\u70b9\u676f\u5496\u5561\u3001\u804a\u804a\u4eca\u5929\u3002\u8bed\u901f\u6162\u3001\u7528\u8bcd\u7b80\u5355\u3002"},
+  interviewer:{emoji:"\ud83d\udcbc", role:"Mr. Chen", title:"\u9762\u8bd5\u5b98",   level:"Intermediate", desc:"\u6a21\u62df\u6c42\u804c\u9762\u8bd5\uff0c\u7ec3\u4e60\u4e13\u4e1a\u3001\u6709\u6761\u7406\u7684\u56de\u7b54\u3002"},
+  traveler:   {emoji:"\ud83c\udf0d", role:"Lucas",    title:"\u65c5\u9014\u5076\u9047", level:"Intermediate", desc:"\u5728\u91cc\u65af\u672c\u9047\u5230\u7684\u5065\u8c08\u5f53\u5730\u4eba\uff0c\u53e3\u8bed\u5316\u3001\u5730\u9053\u3002"},
+  debate:     {emoji:"\u2696\ufe0f", role:"Aria",     title:"\u8fa9\u8bba\u642d\u5b50", level:"Advanced",     desc:"\u5979\u6c38\u8fdc\u7ad9\u4f60\u7684\u5bf9\u7acb\u9762\uff0c\u903c\u4f60\u4e3a\u89c2\u70b9\u8fa9\u62a4\u3002"},
+  terminal:   {emoji:"\ud83d\udda5\ufe0f", role:"Tux", title:"\u7ec8\u7aef\u5bfc\u5e08", level:"Linux", mode:"terminal", desc:"\u624b\u628a\u624b\u6559\u4f60\u7528 shell \u547d\u4ee4\uff0c\u8fb9\u8bb2\u8fb9\u51fa\u7ec3\u4e60\u3001\u70b9\u8bc4\u4f60\u7684\u7b54\u6848\u3002"},
 };
 
 let scenario=null, history=[], streaming=false;
+
+/* ---------- session 持久化 ---------- */
+const SESSION_KEY='speakeasy_sessions_v1';
+function loadSessions(){
+  try{ return JSON.parse(localStorage.getItem(SESSION_KEY)) || {}; }catch(e){ return {}; }
+}
+function saveSession(){
+  if(!scenario) return;
+  try{
+    const all=loadSessions();
+    all[scenario]=history.slice(-40); // 每个角色最多存 40 条
+    localStorage.setItem(SESSION_KEY, JSON.stringify(all));
+  }catch(e){ /* 隐私模式/超额，忽略 */ }
+}
+function clearSession(key){
+  try{ const all=loadSessions(); delete all[key]; localStorage.setItem(SESSION_KEY, JSON.stringify(all)); }catch(e){}
+}
+// 从 history 重建可见气泡（纠错卡片为即时教学，恢复时不重建）
+function restoreBubbles(){
+  streamEl.innerHTML='';
+  for(const m of history){
+    if(m.role!=='user' && m.role!=='assistant') continue;
+    const ab=addBubble(m.role==='user'?'user':'ai', '');
+    if(m.role==='user'){ ab.span.textContent=m.content; }
+    else{ renderMd(ab.span, m.content); }
+  }
+  streamEl.scrollTop=streamEl.scrollHeight;
+}
 const $=id=>document.getElementById(id);
 const cardsEl=$('cards'), pickerEl=$('picker'), chatEl=$('chat'),
       streamEl=$('stream'), inputEl=$('input'), sendBtn=$('sendBtn'),
-      micBtn=$('micBtn'), errEl=$('err'), backBtn=$('backBtn');
+      micBtn=$('micBtn'), errEl=$('err'), backBtn=$('backBtn'), resetBtn=$('resetBtn');
 
-/* 角色卡片 */
 Object.entries(SCENARIOS).forEach(([key,s])=>{
   const c=document.createElement('button');
   c.className='card';
-  c.innerHTML=`<span class="emoji">${s.emoji}</span>
-    <span class="lvl">${s.level}</span>
-    <h3>${s.role} · ${s.title}</h3>
-    <span class="desc">${s.desc}</span>`;
+  c.innerHTML='<span class="emoji">'+s.emoji+'</span>'+
+    '<span class="lvl">'+s.level+'</span>'+
+    '<h3>'+s.role+' \u00b7 '+s.title+'</h3>'+
+    '<span class="desc">'+s.desc+'</span>';
   c.onclick=()=>startScenario(key);
   cardsEl.appendChild(c);
 });
 
 function startScenario(key){
-  scenario=key; history=[];
+  scenario=key;
   const s=SCENARIOS[key];
   $('headAv').textContent=s.emoji;
-  $('headName').innerHTML=`${s.role} <span>· ${s.title} · ${s.level}</span>`;
+  $('headName').innerHTML=s.role+' <span>\u00b7 '+s.title+' \u00b7 '+s.level+'</span>';
   pickerEl.style.display='none';
   chatEl.style.display='flex';
   backBtn.hidden=false;
-  streamEl.innerHTML=''; errEl.textContent='';
-  send("(The user just arrived. Greet them and start the conversation.)", true);
+  resetBtn.hidden=false;
+  errEl.textContent='';
+
+  const saved=loadSessions()[key];
+  if(saved && saved.length){
+    history=saved;
+    restoreBubbles();
+  }else{
+    history=[];
+    streamEl.innerHTML='';
+    send(null, true);
+  }
 }
 backBtn.onclick=()=>{
   if(streaming) return;
   if('speechSynthesis' in window) speechSynthesis.cancel();
-  chatEl.style.display='none'; pickerEl.style.display='flex'; backBtn.hidden=true;
+  chatEl.style.display='none'; pickerEl.style.display='flex'; backBtn.hidden=true; resetBtn.hidden=true;
+};
+resetBtn.onclick=()=>{
+  if(streaming || !scenario) return;
+  if('speechSynthesis' in window) speechSynthesis.cancel();
+  clearSession(scenario);
+  history=[];
+  streamEl.innerHTML=''; errEl.textContent='';
+  send(null, true);
 };
 
-/* 气泡渲染 */
-function addBubble(role, text=""){
+function addBubble(role, text){
+  text=text||"";
   const row=document.createElement('div');
   row.className='row '+(role==='user'?'me':'ai');
   const av=document.createElement('div'); av.className='av-s';
-  av.textContent = role==='user' ? '🙂' : SCENARIOS[scenario].emoji;
+  av.textContent = role==='user' ? '\ud83d\ude42' : SCENARIOS[scenario].emoji;
   const b=document.createElement('div'); b.className='bubble';
   const span=document.createElement('span'); span.className='txt'; span.textContent=text;
   b.appendChild(span);
   if(role!=='user'){
-    const sp=document.createElement('button'); sp.className='speak'; sp.textContent='🔊';
-    sp.onclick=()=>speak(span.textContent); b.appendChild(sp);
+    const sp=document.createElement('button'); sp.className='speak'; sp.textContent='\ud83d\udd0a';
+    sp.onclick=()=>speak(span.dataset.plain || span.textContent); b.appendChild(sp);
   }
   row.appendChild(av); row.appendChild(b);
   streamEl.appendChild(row);
   streamEl.scrollTop=streamEl.scrollHeight;
-  return {bubble:b,span};
+  return {bubble:b,span:span};
 }
-function esc(s){return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
-function renderAi(bubble, span, raw){
-  const m=raw.match(/\[\[correction\]\]([\s\S]*?)\[\[\/correction\]\]/);
-  let body=raw, corrEl=bubble.querySelector('.correction');
+function esc(s){return s.replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
+// 容错解析纠错标签：兼容闭合标签写歪/缺失的情况
+function parseCorrection(raw){
+  // 必须有开标签才尝试解析；流式中开标签还没出现时直接原样显示
+  const openIdx=raw.indexOf('[[correction]]');
+  if(openIdx<0) return {corr:null, body:raw};
+
+  const after=raw.slice(openIdx+14); // 14 = '[[correction]]'.length
+  // 依次尝试多种闭合写法：标准 -> 残缺 -> 换行兜底
+  let inner=null, rest='';
+  const m=after.match(/^([\s\S]*?)(\[\[\/correction\]\]|\[\/correction\]\]|\[\[\/?correction\]?\]|\]\])/);
   if(m){
-    body=raw.replace(m[0],'').trim();
-    const parts=m[1].split('|');
-    const fix=(parts[0]||'').split('->');
-    const wrong=(fix[0]||'').trim(), right=(fix[1]||'').trim(), reason=(parts[1]||'').trim();
-    if(!corrEl){ corrEl=document.createElement('div'); corrEl.className='correction'; bubble.insertBefore(corrEl, span); }
-    corrEl.innerHTML=`<span class="lab">提示</span><s>${esc(wrong)}</s> → <strong>${esc(right)}</strong>${reason?` · ${esc(reason)}`:''}`;
+    inner=m[1];
+    rest=after.slice(m.index+m[0].length);
+  }else{
+    // 还没等到闭合标签：可能仍在流式输出中。
+    // 用换行做兜底——纠错内容通常单行，遇到换行就认为结束。
+    const nl=after.indexOf('\n');
+    if(nl>=0){ inner=after.slice(0,nl); rest=after.slice(nl); }
+    else return {corr:'__pending__', body:''}; // 标签未闭合且无换行，先不渲染正文
   }
-  span.textContent=body;
+
+  // 解析 inner: "wrong -> right | reason"
+  const pipe=inner.split('|');
+  const fix=(pipe[0]||'').split(/->|\u2192/); // 兼容 -> 和 →
+  const wrong=(fix[0]||'').trim();
+  const right=(fix[1]||'').trim();
+  const reason=(pipe.slice(1).join('|')||'').trim();
+
+  // 兜底：左右相同 / 缺失 / 自我否定式纠错（"你的答案完全正确"），一律丢弃
+  const norm=s=>s.replace(/\s+/g,' ').trim().toLowerCase();
+  const bodyText=(rest||'').replace(/^\s*\n?/,'').trim();
+  const looksLikeNonCorrection=/correct|正确|不需要纠正|no correction|无需/i.test(reason);
+  if(!wrong || !right || norm(wrong)===norm(right) || looksLikeNonCorrection){
+    return { corr:null, body: bodyText || raw };
+  }
+  return { corr:{wrong,right,reason}, body: bodyText };
 }
 
-/* 朗读 */
+// 把 markdown 文本渲染成安全 HTML 写入元素；同时在 dataset 里存纯文本供 TTS 使用
+function renderMd(el, text){
+  const html = DOMPurify.sanitize(marked.parse(text || '', {breaks:true}));
+  el.innerHTML = html;
+  el.dataset.plain = (text || '').trim(); // 朗读用原始文本，避免把符号念出来
+}
+
+function renderAi(bubble, span, raw){
+  const {corr, body}=parseCorrection(raw);
+  let corrEl=bubble.querySelector('.correction');
+  if(corr && corr!=='__pending__'){
+    if(!corrEl){ corrEl=document.createElement('div'); corrEl.className='correction'; bubble.insertBefore(corrEl, span); }
+    corrEl.innerHTML='<span class="lab">\u63d0\u793a</span><s>'+esc(corr.wrong)+'</s> \u2192 <strong>'+esc(corr.right)+'</strong>'+(corr.reason?' \u00b7 '+esc(corr.reason):'');
+    renderMd(span, body);
+  }else if(corr==='__pending__'){
+    renderMd(span, '');
+  }else{
+    renderMd(span, body);
+  }
+}
+
 let voice=null;
 function pickVoice(){
   const vs=speechSynthesis.getVoices();
@@ -260,7 +364,6 @@ function speak(text){
   speechSynthesis.speak(u);
 }
 
-/* 语音输入 */
 const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let recog=null, recording=false;
 if(SR){
@@ -273,50 +376,73 @@ if(SR){
 }else{ micBtn.style.display='none'; }
 micBtn.onclick=()=>{ if(!recog) return; recording?recog.stop():recog.start(); };
 
-/* 发送 + SSE 流式 */
-async function send(userText, isOpener=false){
+async function send(userText, isOpener){
   if(streaming) return;
   errEl.textContent='';
-  if(!isOpener){ if(!userText.trim()) return; addBubble('user', userText); }
-  history.push({role:'user', content:userText});
+  if(!isOpener){
+    if(!userText.trim()) return;
+    addBubble('user', userText);
+    history.push({role:'user', content:userText});
+  }
+  // opener: 不写入 history，后端凭 messages 为空判定为开场
 
   streaming=true; sendBtn.disabled=true;
-  const {bubble,span}=addBubble('ai','');
+  const ab=addBubble('ai',''); const bubble=ab.bubble, span=ab.span;
   const cursor=document.createElement('span'); cursor.className='typing'; bubble.appendChild(cursor);
 
   let raw='';
   try{
     const res=await fetch(ENDPOINT,{
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({scenario, messages:history})
+      body:JSON.stringify({scenario:scenario, messages:history})
     });
-    if(!res.ok||!res.body) throw new Error('服务异常 '+res.status);
+    if(!res.ok||!res.body) throw new Error('\u670d\u52a1\u5f02\u5e38 '+res.status);
     const reader=res.body.getReader(), dec=new TextDecoder();
     let buf='';
     while(true){
-      const {value,done}=await reader.read();
-      if(done) break;
-      buf+=dec.decode(value,{stream:true});
+      const r=await reader.read();
+      if(r.done) break;
+      buf+=dec.decode(r.value,{stream:true});
       let idx;
       while((idx=buf.indexOf('\n\n'))>=0){
         const frame=buf.slice(0,idx); buf=buf.slice(idx+2);
-        const ev=/event:\s*(.*)/.exec(frame)?.[1]?.trim();
-        const dataLine=/data:\s*([\s\S]*)/.exec(frame)?.[1];
+        const evM=/event:\s*(.*)/.exec(frame); const ev=evM?evM[1].trim():null;
+        const dM=/data:\s*([\s\S]*)/.exec(frame); const dataLine=dM?dM[1]:null;
         if(!dataLine) continue;
-        let p; try{p=JSON.parse(dataLine);}catch{continue;}
+        let p; try{p=JSON.parse(dataLine);}catch(e){continue;}
         if(ev==='token'){ raw+=p.text; renderAi(bubble, span, raw); streamEl.scrollTop=streamEl.scrollHeight; }
-        else if(ev==='error'){ throw new Error(p.message||'流式错误'); }
+        else if(ev==='error'){ throw new Error(p.message||'\u6d41\u5f0f\u9519\u8bef'); }
       }
     }
-  }catch(e){ errEl.textContent='⚠ '+e.message; }
+  }catch(e){ errEl.textContent='\u26a0 '+e.message; }
   finally{ cursor.remove(); streaming=false; sendBtn.disabled=false; }
 
-  const clean=raw.replace(/\[\[correction\]\][\s\S]*?\[\[\/correction\]\]/,'').trim();
-  if(clean){ history.push({role:'assistant', content:clean}); speak(clean); }
+  const parsed=parseCorrection(raw);
+  const clean=(parsed.corr&&parsed.corr!=='__pending__')?parsed.body
+    : raw.replace(/\[\[correction\]\][\s\S]*?(\[\[\/correction\]\]|\]\])/,'').trim();
+
+  if(clean){
+    history.push({role:'assistant', content:clean});
+    if(!SCENARIOS[scenario].mode){
+      const spoken=(typeof DOMPurify!=='undefined'&&typeof marked!=='undefined')
+        ? new DOMParser().parseFromString(DOMPurify.sanitize(marked.parse(clean)),'text/html').body.textContent
+        : clean;
+      speak(spoken);
+    }
+  }else{
+    // 空回复：移除空气泡，回滚刚加入的用户消息，避免 history 出现连续 user 导致后续请求失败
+    bubble.parentElement && bubble.parentElement.remove();
+    if(!isOpener && history.length && history[history.length-1].role==='user'){
+      history.pop();
+    }
+    if(!errEl.textContent){
+      errEl.textContent='\u26a0 \u6ca1\u6709\u6536\u5230\u56de\u590d\uff0c\u8bf7\u91cd\u8bd5\u3002'; // 没有收到回复，请重试。
+    }
+  }
+  saveSession();
   inputEl.focus();
 }
 
-/* 输入框 */
 function autosize(){ inputEl.style.height='auto'; inputEl.style.height=Math.min(inputEl.scrollHeight,110)+'px'; }
 inputEl.addEventListener('input', autosize);
 inputEl.addEventListener('keydown', e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); fire(); } });
@@ -329,4 +455,3 @@ function fire(){
 </script>
 </body>
 </html>
-
